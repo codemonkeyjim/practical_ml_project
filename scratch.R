@@ -1,8 +1,9 @@
 library(dplyr)
 library(caret)
-library(parallel)
-library(doMC)
-registerDoMC(cores = 4)
+library(randomForest)
+# library(parallel)
+# library(doParallel)
+# library(doMC)
 
 ### Load data files
 # testing_raw <- read.csv('data/pml-testing.csv', stringsAsFactors = FALSE, na.strings = c("#DIV/0!", '""'),
@@ -27,12 +28,12 @@ merged <- merged %>%
     -starts_with('var'),
     -starts_with('amplitude'),
     -starts_with('skewness'),
-    -starts_with('kurtosis')
+    -starts_with('kurtosis'),
+    -one_of('X', 'user_name'),
+    -matches('timestamp'),
+    -matches('window')
   ) %>%
   mutate(
-    X = as.character(X),
-    user_name = factor(user_name),
-    new_window = (new_window == "yes"),
     classe = factor(classe)
   ) %>%
   mutate_each(funs(as.numeric), matches("arm")) %>%
@@ -47,43 +48,52 @@ testing <- merged %>%
   filter(is_train == FALSE) %>%
   select(-is_train, -classe)
 
-# rm(training_raw, testing_raw, merged)
+rm(training_raw, testing_raw, merged)
 
 ### Generate a model
-set.seed(1309916410)
+set.seed(130991)
 
-# Remove attributes not used in the model
-training <- training %>%
-  select(-X, -user_name, -matches('timestamp'), -matches('window'))
+# tuneRes <- tuneRF(select(training, -classe), training$classe, stepFactor=1.5, doBest=TRUE)
 
-in_xvalid <- createDataPartition(y = training$classe, p = 0.3, list = FALSE)
-xvalid <- training[in_xvalid, ]
-training <- training[-in_xvalid,]
-
-iter <- 1
-ntree <- 20
-mtry <- 5
+iter <- 10
+ntree <- 25
 
 ctrl <- trainControl(
   number = iter,
   verboseIter = TRUE,
-  method = 'boot'
+  allowParallel = TRUE
 )
 
-grid <- data.frame(mtry = mtry)
+# ncols <- dim(training)[2]
+# grid <- expand.grid(mtry = c(floor(sqrt(ncols)), floor(ncols/3), floor(ncols/2), ncols - 1))
+
+predictors = select(training, -classe)
+classe = training$classe
+
+# registerDoMC(cores = 4)
+# cluster <- makeCluster(4)
+# registerDoParallel(cluster)
 
 model <- train(
-  select(training, -classe), training$classe,
+  x = predictors,
+  y = classe,
   method = 'rf',
+  preProcess = NULL,
+  importance = TRUE,
   do.trace = TRUE,
   proximity = TRUE,
   ntree = ntree,
-  trainControl = ctrl,
-  tuneGrid <- grid,
-  preProcess = c('center', 'scale'),
-  tuneLength = 1)
+  trControl = ctrl)
+#   trControl = ctrl,
+#   tuneGrid <- grid)
 
-model
+# stopCluster(cluster)
 
-pred <- predict(model, newdata = select(xvalid, -classe))
-table(pred, xvalid$classe)
+varImpPlot(model$finalModel)
+plot(model)
+
+trainPred <- predict(model, newdata = training)
+testPred <- predict(model, newdata = testing)
+
+trainPredProb <- predict(model, newdata = training, type = "prob")
+testPredProb <- predict(model, newdata = testing, type = "prob")
