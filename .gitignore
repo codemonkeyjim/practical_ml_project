@@ -4,3 +4,5 @@
 *.html
 *.pdf
 data/
+report_cache/
+report_files/
