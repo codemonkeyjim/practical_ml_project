@@ -1,0 +1,108 @@
+---
+title: "Using On-Body Sensors to Classify Weightlifting Errors"
+author: "Jim Pfleger"
+date: "January 24, 2016"
+output: html_document
+---
+
+```{r load_libraries,cache=TRUE,echo=FALSE,results='hide',message=FALSE}
+library(dplyr)
+library(caret)
+library(randomForest)
+```
+
+```{r load_data,dependson='load_libraries',cache=TRUE,echo=FALSE,results='hide'}
+testing_raw <- read.csv('data/pml-testing.csv', stringsAsFactors = FALSE, na.strings = c("#DIV/0!", '""'))
+testing_raw <- testing_raw %>% mutate(is_train = FALSE, classe = NA)
+
+training_raw <- read.csv('data/pml-training.csv', stringsAsFactors = FALSE, na.strings = c("#DIV/0!", '""'))
+training_raw <- training_raw %>% mutate(is_train = TRUE, problem_id = NA)
+```
+
+
+# Summary
+
+When lifting weights, proper technique is important to both prevent injury and maximize the effectiveness of training. This paper presents a model for identifying proper and improper technique based on data from on-body sensors.
+
+```{r clean_data,dependson='load_data',cache=TRUE,echo=FALSE,results='hide'}
+### Merge data sets for clean up
+merged <- rbind(testing_raw, training_raw)
+
+merged <- merged %>%
+  select(
+    -starts_with('min'),
+    -starts_with('max'),
+    -starts_with('avg'),
+    -starts_with('stddev'),
+    -starts_with('var'),
+    -starts_with('amplitude'),
+    -starts_with('skewness'),
+    -starts_with('kurtosis'),
+    -one_of('X', 'user_name'),
+    -matches('timestamp'),
+    -matches('window')
+  ) %>%
+  mutate(
+    classe = factor(classe)
+  ) %>%
+  mutate_each(funs(as.numeric), matches("arm")) %>%
+  mutate_each(funs(as.numeric), matches("belt")) %>%
+  mutate_each(funs(as.numeric), matches("dumbbell"))
+
+training <- merged %>%
+  filter(is_train == TRUE) %>%
+  select(-is_train, -problem_id)
+
+testing <- merged %>%
+  filter(is_train == FALSE) %>%
+  select(-is_train, -classe)
+
+rm(training_raw, testing_raw, merged)
+```
+
+# Data Preparation
+
+The model was trained on a subset of the Weight Lifting Exercises Dataset originally by Velloso _et al._ [^data] The classe column -- which identifies whether the exercise was performed properly, or which one of four errors occurred -- was kept and converted to a factor. The only other columns that were kept were those related to the raw readings from the arm, belt, and dumbbell sensors.
+
+[^data]: Velloso, E.; Bulling, A.; Gellersen, H.; Ugulino, W.; Fuks, H. [Qualitative Activity Recognition of Weight Lifting Exercises](http://groupware.les.inf.puc-rio.br/work.jsf?p1=11201). Proceedings of 4th International Conference in Cooperation with SIGCHI (Augmented Human '13). Stuttgart, Germany: ACM SIGCHI, 2013.
+
+```{r create_model,dependson='clean_data',cache=TRUE,cache.lazy=FALSE,echo=FALSE}
+set.seed(130991)
+
+iter <- 10
+ntree <- 25
+
+ctrl <- trainControl(
+  number = iter
+)
+
+predictors = select(training, -classe)
+classe = training$classe
+
+model <- train(
+  x = predictors,
+  y = classe,
+  method = 'rf',
+  preProcess = NULL,
+  importance = TRUE,
+  do.trace = FALSE,
+  proximity = FALSE,
+  ntree = ntree,
+  trControl = ctrl)
+```
+
+# Model Selection
+
+A random forest model was used because random forests have been shown to have superior performance in classification problems such as this. The model was trained on the entire training set (_n_ = `r nrow(training)`) using bootstraping to do cross-validation during training. `r iter` iterations of `r ntree` trees were run. Each iteration/tree was run with $m \in (`r model$results$mtry`)$ randomly selected predictors. The final model uses `r model$finalModel$mtry` predictors whose importance is shown below.
+
+```{r plot_importance,dependson='create_model',cache=TRUE,echo=FALSE}
+varImpPlot(model$finalModel, main="Variable Importance")
+```
+
+# Model Performance
+
+# Results
+
+
+
+create a report describing how you built your model, how you used cross validation, what you think the expected out of sample error is, and why you made the choices you did
