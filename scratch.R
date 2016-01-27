@@ -80,8 +80,7 @@ model <- train(
   method = 'rf',
   preProcess = NULL,
   importance = TRUE,
-  do.trace = TRUE,
-  proximity = TRUE,
+  proximity = FALSE,
   ntree = ntree,
   trControl = ctrl)
 #   trControl = ctrl,
@@ -97,3 +96,12 @@ testPred <- predict(model, newdata = testing)
 
 trainPredProb <- predict(model, newdata = training, type = "prob")
 testPredProb <- predict(model, newdata = testing, type = "prob")
+
+library(dplyr)
+library(reshape2)
+oob <- melt(model$finalModel$err.rate)
+colnames(oob) <- c('tree', 'class', 'error')
+g <- ggplot(data = oob) + aes(x = tree, y = error, color = class) + geom_line()
+g
+g <- ggplot(data = oob) + aes(x = tree, y = error) + geom_line() + facet_wrap(~class, ncol = 3)
+g
