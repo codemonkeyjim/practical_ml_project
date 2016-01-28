@@ -105,3 +105,10 @@ g <- ggplot(data = oob) + aes(x = tree, y = error, color = class) + geom_line()
 g
 g <- ggplot(data = oob) + aes(x = tree, y = error) + geom_line() + facet_wrap(~class, ncol = 3)
 g
+
+cm <- model$finalModel$confusion
+diag(cm) <- 0
+cm <- as.data.frame(cm) %>%
+  select(-class.error)
+
+sum(colSums(cm)) / nrow(training)

@@ -9,16 +9,18 @@ output: html_document
 library(dplyr)
 library(caret)
 library(randomForest)
+library(knitr)
+library(reshape2)
+options(scipen = 0, digits = 3)
 ```
 
-```{r load_data,dependson='load_libraries',cache=TRUE,echo=FALSE,results='hide'}
+```{r load_data,cache=TRUE,echo=FALSE,results='hide'}
 testing_raw <- read.csv('data/pml-testing.csv', stringsAsFactors = FALSE, na.strings = c("#DIV/0!", '""'))
 testing_raw <- testing_raw %>% mutate(is_train = FALSE, classe = NA)
 
 training_raw <- read.csv('data/pml-training.csv', stringsAsFactors = FALSE, na.strings = c("#DIV/0!", '""'))
 training_raw <- training_raw %>% mutate(is_train = TRUE, problem_id = NA)
 ```
-
 
 # Summary
 
@@ -62,11 +64,11 @@ rm(training_raw, testing_raw, merged)
 
 # Data Preparation
 
-The model was trained on a subset of the Weight Lifting Exercises Dataset originally by Velloso _et al._ [^data] The classe column -- which identifies whether the exercise was performed properly, or which one of four errors occurred -- was kept and converted to a factor. The only other columns that were kept were those related to the raw readings from the arm, belt, and dumbbell sensors.
+The model was trained on a subset of the Weight Lifting Exercises Dataset originally by Velloso _et al._[^data] The classe column -- which identifies whether the exercise was performed properly, or which one of four errors occurred -- was kept and converted to a factor. The only other columns that were kept were those related to the raw readings from the arm, belt, and dumbbell sensors. A model was then built to predict the exercise error class using the remaining columns.
 
 [^data]: Velloso, E.; Bulling, A.; Gellersen, H.; Ugulino, W.; Fuks, H. [Qualitative Activity Recognition of Weight Lifting Exercises](http://groupware.les.inf.puc-rio.br/work.jsf?p1=11201). Proceedings of 4th International Conference in Cooperation with SIGCHI (Augmented Human '13). Stuttgart, Germany: ACM SIGCHI, 2013.
 
-```{r create_model,dependson='clean_data',cache=TRUE,cache.lazy=FALSE,echo=FALSE}
+```{r create_model,dependson='clean_data',cache=TRUE,echo=FALSE}
 set.seed(130991)
 
 iter <- 10
@@ -93,16 +95,32 @@ model <- train(
 
 # Model Selection
 
-A random forest model was used because random forests have been shown to have superior performance in classification problems such as this. The model was trained on the entire training set (_n_ = `r nrow(training)`) using bootstraping to do cross-validation during training. `r iter` iterations of `r ntree` trees were run. Each iteration/tree was run with $m \in (`r model$results$mtry`)$ randomly selected predictors. The final model uses `r model$finalModel$mtry` predictors whose importance is shown below.
+A random forest model was used because random forests have been shown to have superior performance in classification problems such as this.[^breiman] The model was trained on the entire training set $(n = `r nrow(training)`)$ using bootstraping to do cross-validation during training. `r iter` iterations of `r ntree` trees were built using Breiman's random forest algorithm.[^breiman] Each iteration/tree was built using $m \in (`r model$results$mtry`)$ randomly selected predictors. A sample of rows $(n = `r nrow(training)`)$ was taken (with replacement) from the training set, predicted using the iteration's forest and the average accuracy was calculated. The forest with the highest average accuracy was selected as the final model, which uses `r model$finalModel$mtry` predictors whose importance is shown below.
 
-```{r plot_importance,dependson='create_model',cache=TRUE,echo=FALSE}
+[^breiman]: Breiman, L. (2001), _Random Forests_, Machine Learning 45(1), 5-32.
+
+```{r plot_importance,dependson='create_model',cache=TRUE,echo=FALSE,fig.height=6,fig.width=12}
 varImpPlot(model$finalModel, main="Variable Importance")
 ```
 
 # Model Performance
 
-# Results
+```{r melt_error_rates,dependson='create_model',cache=TRUE,echo=FALSE}
+oob <- melt(model$finalModel$err.rate)
+colnames(oob) <- c('tree', 'class', 'error')
+```
 
+The resulting model has an overall OOB error rate of `r round(oob[oob$tree==25&oob$class=='OOB',]$error * 100,2)`%, which was determined during the model building by testing each successive tree against a random sampling of the training data that was not used to build the tree. A graph follows showing the change in OOB and per-class error rates for successive trees in the final model.
 
+```{r plot_error_rates,dependson='melt_error_rates',cache=TRUE,echo=FALSE}
+g <- ggplot(data = oob) + aes(x = tree, y = error) + geom_line() + facet_wrap(~class, ncol = 3)
+g
+```
 
-create a report describing how you built your model, how you used cross validation, what you think the expected out of sample error is, and why you made the choices you did
+This can be seen in more detail in the confusion matrix below.
+
+```{r confusion_matrix,dependson='create_model',cache=TRUE,echo=FALSE}
+kable(model$finalModel$confusion)
+```
+
+In addition to the analysis done against the training data set, a small test data set $(n = `r nrow(testing)`)$ was also predicted with 100% accuracy.
