@@ -1,0 +1,2 @@
+Web page: https://codemonkeyjim.github.io/practical_ml_project/
+Source repo: https://github.com/codemonkeyjim/practical_ml_project
