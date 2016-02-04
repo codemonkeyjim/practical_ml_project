@@ -5,7 +5,19 @@ date: "January 24, 2016"
 output: html_document
 ---
 
-```{r load_libraries,cache=TRUE,echo=FALSE,results='hide',message=FALSE}
+# Summary
+
+When lifting weights, proper technique is important to both prevent injury and maximize the effectiveness of training. This paper presents a model for identifying proper and improper technique based on data from on-body sensors.
+
+The full source for this project can be found in my [GitHub repository](https://github.com/codemonkeyjim/practical_ml_project).
+
+# Data Preparation
+
+The model was trained on a subset of the Weight Lifting Exercises Dataset originally by Velloso _et al._[^data] The classe column -- which identifies whether the exercise was performed properly, or which one of four errors occurred -- was kept and converted to a factor. The only other columns that were kept were those related to the raw readings from the arm, belt, and dumbbell sensors. A model was then built to predict the exercise error class using the remaining columns.
+
+[^data]: Velloso, E.; Bulling, A.; Gellersen, H.; Ugulino, W.; Fuks, H. [Qualitative Activity Recognition of Weight Lifting Exercises](http://groupware.les.inf.puc-rio.br/work.jsf?p1=11201). Proceedings of 4th International Conference in Cooperation with SIGCHI (Augmented Human '13). Stuttgart, Germany: ACM SIGCHI, 2013.
+
+```{r load_libraries,cache=TRUE,echo=TRUE,results='hide',message=FALSE}
 library(dplyr)
 library(caret)
 library(randomForest)
@@ -14,7 +26,7 @@ library(reshape2)
 options(scipen = 0, digits = 3)
 ```
 
-```{r load_data,cache=TRUE,echo=FALSE,results='hide'}
+```{r load_data,cache=TRUE,echo=TRUE,results='hide'}
 testing_raw <- read.csv('data/pml-testing.csv', stringsAsFactors = FALSE, na.strings = c("#DIV/0!", '""'))
 testing_raw <- testing_raw %>% mutate(is_train = FALSE, classe = NA)
 
@@ -22,11 +34,7 @@ training_raw <- read.csv('data/pml-training.csv', stringsAsFactors = FALSE, na.s
 training_raw <- training_raw %>% mutate(is_train = TRUE, problem_id = NA)
 ```
 
-# Summary
-
-When lifting weights, proper technique is important to both prevent injury and maximize the effectiveness of training. This paper presents a model for identifying proper and improper technique based on data from on-body sensors.
-
-```{r clean_data,dependson='load_data',cache=TRUE,echo=FALSE,results='hide'}
+```{r clean_data,dependson='load_data',cache=TRUE,echo=TRUE,results='hide'}
 ### Merge data sets for clean up
 merged <- rbind(testing_raw, training_raw)
 
@@ -62,13 +70,9 @@ testing <- merged %>%
 rm(training_raw, testing_raw, merged)
 ```
 
-# Data Preparation
+# Model Selection
 
-The model was trained on a subset of the Weight Lifting Exercises Dataset originally by Velloso _et al._[^data] The classe column -- which identifies whether the exercise was performed properly, or which one of four errors occurred -- was kept and converted to a factor. The only other columns that were kept were those related to the raw readings from the arm, belt, and dumbbell sensors. A model was then built to predict the exercise error class using the remaining columns.
-
-[^data]: Velloso, E.; Bulling, A.; Gellersen, H.; Ugulino, W.; Fuks, H. [Qualitative Activity Recognition of Weight Lifting Exercises](http://groupware.les.inf.puc-rio.br/work.jsf?p1=11201). Proceedings of 4th International Conference in Cooperation with SIGCHI (Augmented Human '13). Stuttgart, Germany: ACM SIGCHI, 2013.
-
-```{r create_model,dependson='clean_data',cache=TRUE,echo=FALSE}
+```{r create_model,dependson='clean_data',cache=TRUE,echo=TRUE}
 set.seed(130991)
 
 iter <- 10
@@ -93,24 +97,22 @@ model <- train(
   trControl = ctrl)
 ```
 
-# Model Selection
-
 A random forest model was used because random forests have been shown to have superior performance in classification problems such as this.[^breiman] The model was trained on the entire training set $(n = `r nrow(training)`)$ using bootstraping to do cross-validation during training. `r iter` iterations of `r ntree` trees were built using Breiman's random forest algorithm.[^breiman] Each iteration/tree was built using $m \in (`r model$results$mtry`)$ randomly selected predictors. A sample of rows $(n = `r nrow(training)`)$ was taken (with replacement) from the training set, predicted using the iteration's forest and the average accuracy was calculated. The forest with the highest average accuracy was selected as the final model, which uses `r model$finalModel$mtry` predictors whose importance is shown below.
 
 [^breiman]: Breiman, L. (2001), _Random Forests_, Machine Learning 45(1), 5-32.
 
-```{r plot_importance,dependson='create_model',cache=TRUE,echo=FALSE,fig.height=6,fig.width=12}
+```{r plot_importance,dependson='create_model',cache=TRUE,echo=TRUE,fig.height=6,fig.width=12}
 varImpPlot(model$finalModel, main="Variable Importance")
 ```
 
 # Model Performance
 
-```{r melt_error_rates,dependson='create_model',cache=TRUE,echo=FALSE}
+```{r melt_error_rates,dependson='create_model',cache=TRUE,echo=TRUE}
 oob <- melt(model$finalModel$err.rate)
 colnames(oob) <- c('tree', 'class', 'error')
 ```
 
-The resulting model has an overall OOB error rate of `r round(oob[oob$tree==25&oob$class=='OOB',]$error * 100,2)`%, which was determined during the model building by testing each successive tree against a random sampling of the training data that was not used to build the tree. A graph follows showing the change in OOB and per-class error rates for successive trees in the final model.
+The resulting model has an overall OOB error rate of `r round(oob[oob$tree==25&oob$class=='OOB',]$error * 100,2)`%, which was determined during the model building by testing each successive tree against a random sampling of the training data that was not used to build the tree. As a result, this is also the expected out of sample error rate. A graph follows showing the change in OOB and per-class error rates for successive trees in the final model.
 
 ```{r plot_error_rates,dependson='melt_error_rates',cache=TRUE,echo=FALSE}
 g <- ggplot(data = oob) + aes(x = tree, y = error) + geom_line() + facet_wrap(~class, ncol = 3)
